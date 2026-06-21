@@ -1,0 +1,5 @@
+# Npcap/WinPcap(wpcap, Packet) + windows-sys 0.36.1 umbrella import lib(libwindows.a) 링크 경로.
+# gnullvm 타깃은 windows-sys 0.36.1의 sub-crate(windows_x86_64_*)가 없어
+# `-lwindows`/`-lwpcap` 제공자가 없으므로, 해당 import lib들을 8.Ncap에 모아 수동으로 검색 경로에 추가.
+[target.x86_64-pc-windows-gnullvm]
+rustflags = ["-L", "C:/JUNGHO/6.Software/8.Ncap"]

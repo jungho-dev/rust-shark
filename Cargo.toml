@@ -1,0 +1,45 @@
+# Cargo.toml (workspace)
+
+[workspace]
+resolver = "3"
+members = [ "crates/rust-shark-core", "crates/rust-shark-app"]
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# package
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/jungho-dev/rust-shark"
+homepage = "https://github.com/jungho-dev/rust-shark"
+keywords = ["packet-analyzer", "network", "tui", "pcap", "wireshark"]
+categories = ["command-line-utilities", "network-programming"]
+description = "A Wireshark-style terminal packet analyzer — lightweight, keyboard-driven, scriptable Wireshark alternative for the terminal"
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# dependencies
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[workspace.dependencies]
+pcap = { version = "2" }
+ratatui = { version = "0.29" }
+crossterm = { version = "0.28" }
+nom = { version = "7" }
+crossbeam-channel = { version = "0.5" }
+serde_json = { version = "1" }
+anyhow = { version = "1" }
+thiserror = { version = "2" }
+lru = { version = "0.12" }
+libc = { version = "0.2" }
+tempfile = { version = "3" }
+md-5 = { version = "0.10" }
+sha2 = { version = "0.10" }
+maxminddb = { version = "0.24" }
+dirs = { version = "5" }
+toml = { version = "0.8" }
+regex = { version = "1" }
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.32", features = ["bundled"] }

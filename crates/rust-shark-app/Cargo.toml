@@ -1,0 +1,47 @@
+# Cargo.toml (rust-shark-app)
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# package
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[package]
+name = "rust-shark-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# binary
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[[bin]]
+name = "rust-shark"
+path = "src/main.rs"
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# dependencies
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[dependencies]
+rust-shark-core = { path = "../rust-shark-core" }
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+crossbeam-channel.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+pcap.workspace = true
+chrono.workspace = true
+toml.workspace = true
+dirs.workspace = true
+regex.workspace = true
+serde.workspace = true
+
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+# target
+# ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
