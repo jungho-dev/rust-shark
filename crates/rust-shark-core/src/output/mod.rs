@@ -1,4 +1,5 @@
 pub mod json;
+pub mod log_writer;
 pub mod pcap_writer;
 pub mod pcapng_writer;
 

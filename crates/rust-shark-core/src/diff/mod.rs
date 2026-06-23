@@ -87,6 +87,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         }
     }
 

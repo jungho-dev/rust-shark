@@ -1,5 +1,20 @@
+# 기본 빌드 타깃: gnullvm (llvm-mingw + clang). gnu 툴체인 sysroot에 gnullvm std 수동 반입됨.
+[build]
+target = "x86_64-pc-windows-gnullvm"
+
+[env]
+# cc-rs(libsqlite3-sys 등 C 컴파일)가 PATH 의존 없이 llvm-mingw clang/ar를 쓰도록 절대경로 지정.
+CC_x86_64_pc_windows_gnullvm = "C:/JUNGHO/1.Language/8.Clang/bin/clang.exe"
+AR_x86_64_pc_windows_gnullvm = "C:/JUNGHO/1.Language/8.Clang/bin/ar.exe"
+
 # Npcap/WinPcap(wpcap, Packet) + windows-sys 0.36.1 umbrella import lib(libwindows.a) 링크 경로.
 # gnullvm 타깃은 windows-sys 0.36.1의 sub-crate(windows_x86_64_*)가 없어
 # `-lwindows`/`-lwpcap` 제공자가 없으므로, 해당 import lib들을 8.Ncap에 모아 수동으로 검색 경로에 추가.
 [target.x86_64-pc-windows-gnullvm]
+# llvm-mingw 링커 절대경로 — PATH 의존 없이 x86_64-w64-mingw32-clang(+같은 폴더 dlltool) 사용.
+linker = "C:/JUNGHO/1.Language/8.Clang/bin/x86_64-w64-mingw32-clang.exe"
 rustflags = ["-L", "C:/JUNGHO/6.Software/8.Ncap"]
+
+# gnu 타깃: 외부 mingw 부재 → 번들 self-contained libgcc 사용. Npcap import lib 경로 동일.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-self-contained=yes", "-L", "C:/JUNGHO/6.Software/8.Ncap"]

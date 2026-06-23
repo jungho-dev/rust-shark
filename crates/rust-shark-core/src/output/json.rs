@@ -31,6 +31,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         };
 
         let mut buf = Vec::new();

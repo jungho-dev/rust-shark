@@ -24,6 +24,16 @@ pub fn eval_filter(expr: &FilterExpr, pkt: &DecodedPacket) -> bool {
             Some(FilterValue::Str(s)) => s.contains(pattern.as_str()),
             _ => false,
         },
+        FilterExpr::FreeText(pat) => {
+            let needle = pat.to_lowercase();
+            let s = &pkt.summary;
+            s.info.to_lowercase().contains(&needle)
+                || s.source.to_lowercase().contains(&needle)
+                || s.destination.to_lowercase().contains(&needle)
+                || s.protocol.to_lowercase().contains(&needle)
+                || s.length.to_string().contains(&needle)
+        }
+        FilterExpr::Threat => pkt.threat.is_some(),
         FilterExpr::And(a, b) => eval_filter(a, pkt) && eval_filter(b, pkt),
         FilterExpr::Or(a, b) => eval_filter(a, pkt) || eval_filter(b, pkt),
         FilterExpr::Not(e) => !eval_filter(e, pkt),
@@ -194,6 +204,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         }
     }
 
@@ -236,6 +247,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         }
     }
 
@@ -320,5 +332,29 @@ mod tests {
             &parse_filter("tls.sni contains google").unwrap(),
             &pkt
         ));
+    }
+
+    #[test]
+    fn test_freetext_substring_match() {
+        let pkt = make_dns_packet();
+        // info is "DNS Q example.com"; free-text matching is case-insensitive.
+        assert!(eval_filter(&parse_filter("example").unwrap(), &pkt));
+        assert!(eval_filter(&parse_filter("EXAMPLE").unwrap(), &pkt));
+        // destination address field.
+        assert!(eval_filter(&parse_filter("10.0.0.2").unwrap(), &pkt));
+        // protocol via free-text (uppercase "DNS" is not a structured atom).
+        assert!(eval_filter(&parse_filter("DNS").unwrap(), &pkt));
+        assert!(!eval_filter(&parse_filter("zzznope").unwrap(), &pkt));
+    }
+
+    #[test]
+    fn test_threat_filter_matches_flagged() {
+        let mut pkt = make_tcp_packet();
+        assert!(!eval_filter(&parse_filter("threat").unwrap(), &pkt));
+        pkt.threat = Some(crate::analysis::threat::ThreatAnnotation {
+            kind: crate::analysis::threat::ThreatKind::PortScan,
+            detail: "scan".into(),
+        });
+        assert!(eval_filter(&parse_filter("threat").unwrap(), &pkt));
     }
 }

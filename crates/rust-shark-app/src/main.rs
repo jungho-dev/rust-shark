@@ -237,6 +237,18 @@ fn pick_default_interface() -> Option<String> {
         .map(|d| d.name.clone())
         .or_else(|| pcap::Device::lookup().ok().flatten().map(|d| d.name))
 }
+/// All IP addresses bound to the named capture interface. The TUI uses these to
+/// classify packet direction (IN/OUT). Empty when the device can't be resolved
+/// (the TUI then falls back to a private/public heuristic).
+fn interface_ips(name: &str) -> Vec<std::net::IpAddr> {
+    pcap::Device::list()
+        .ok()
+        .into_iter()
+        .flatten()
+        .find(|d| d.name == name)
+        .map(|d| d.addresses.iter().map(|a| a.addr).collect())
+        .unwrap_or_default()
+}
 fn decode_thread(
     raw_rx: crossbeam_channel::Receiver<capture::RawPacket>,
     decoded_tx: crossbeam_channel::Sender<decode::DecodedPacket>,
@@ -382,6 +394,8 @@ fn main() -> Result<()> {
                 }
             };
 
+            let local_ips = interface_ips(&interface);
+
             let stop = Arc::new(AtomicBool::new(false));
 
             let (raw_tx, raw_rx) = bounded(CHANNEL_CAPACITY);
@@ -409,6 +423,7 @@ fn main() -> Result<()> {
                     write.as_deref(),
                     config.filters.clone(),
                     pcapng,
+                    local_ips,
                 )?;
             }
             stop.store(true, Ordering::Relaxed);
@@ -438,7 +453,7 @@ fn main() -> Result<()> {
             if json {
                 json_output_loop(decoded_rx, stop.clone(), None, None)?;
             } else {
-                tui::run_tui(decoded_rx, buffer_size, None, config.filters.clone(), false)?;
+                tui::run_tui(decoded_rx, buffer_size, None, config.filters.clone(), false, Vec::new())?;
             }
             stop.store(true, Ordering::Relaxed);
             let _ = capture_handle.join();

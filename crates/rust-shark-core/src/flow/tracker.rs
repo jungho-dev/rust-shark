@@ -427,6 +427,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         }
     }
 
@@ -476,6 +477,7 @@ mod tests {
             },
             process: None,
             retransmission: false,
+            threat: None,
         }
     }
 

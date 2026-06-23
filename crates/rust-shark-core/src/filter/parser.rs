@@ -15,10 +15,12 @@ pub fn parse_filter(input: &str) -> Result<FilterExpr, String> {
     if input.is_empty() {
         return Err("empty filter".into());
     }
+    // Structured parse first; anything that is not a complete, valid filter
+    // expression falls back to a free-text substring match, so typing a plain
+    // string (e.g. "google", "192.168.1") just filters packets that contain it.
     match expr(input) {
         Ok(("", expr)) => Ok(expr),
-        Ok((rest, _)) => Err(format!("unexpected trailing input: '{}'", rest)),
-        Err(e) => Err(format!("parse error: {}", e)),
+        _ => Ok(FilterExpr::FreeText(input.to_string())),
     }
 }
 
@@ -61,10 +63,18 @@ fn unary(input: &str) -> IResult<&str, FilterExpr> {
 fn atom(input: &str) -> IResult<&str, FilterExpr> {
     alt((
         delimited(ws(char('(')), expr, ws(char(')'))),
+        threat_atom,
         contains_expr,
         comparison_expr,
         map(ws(protocol_atom), FilterExpr::ProtocolPresent),
     ))(input)
+}
+
+/// `threat` / `alert` keyword — matches packets the live detector flagged.
+fn threat_atom(input: &str) -> IResult<&str, FilterExpr> {
+    map(ws(alt((tag("threat"), tag("alert")))), |_| {
+        FilterExpr::Threat
+    })(input)
 }
 
 fn contains_expr(input: &str) -> IResult<&str, FilterExpr> {
@@ -320,5 +330,33 @@ mod tests {
             }
             _ => panic!("Expected contains"),
         }
+    }
+
+    #[test]
+    fn test_freetext_fallback() {
+        // Plain text that is not a structured expression becomes a free-text match.
+        assert_eq!(
+            parse_filter("google").unwrap(),
+            FilterExpr::FreeText("google".into())
+        );
+        assert_eq!(
+            parse_filter("192.168.1").unwrap(),
+            FilterExpr::FreeText("192.168.1".into())
+        );
+        // Structured filters still parse structurally.
+        assert!(matches!(
+            parse_filter("tcp").unwrap(),
+            FilterExpr::ProtocolPresent(_)
+        ));
+        assert!(matches!(
+            parse_filter("tcp.port == 80").unwrap(),
+            FilterExpr::Comparison { .. }
+        ));
+    }
+
+    #[test]
+    fn test_threat_keyword() {
+        assert_eq!(parse_filter("threat").unwrap(), FilterExpr::Threat);
+        assert_eq!(parse_filter("alert").unwrap(), FilterExpr::Threat);
     }
 }

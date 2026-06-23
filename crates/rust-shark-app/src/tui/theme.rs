@@ -39,6 +39,10 @@ pub const SEL_FG: Color = Color::Indexed(231);
 pub const SEARCH_BG: Color = Color::Indexed(178);
 /// Foreground on the amber search band (dark for contrast).
 pub const SEARCH_FG: Color = Color::Indexed(234);
+/// Inbound direction marker — packets arriving to the local host (bright green).
+pub const DIR_IN: Color = Color::Indexed(78);
+/// Outbound direction marker — packets the local host sends (blue).
+pub const DIR_OUT: Color = Color::Indexed(39);
 
 // ---- Protocol accents ---------------------------------------------------
 /// TCP (bright azure). Also hex byte column + throughput sparkline.

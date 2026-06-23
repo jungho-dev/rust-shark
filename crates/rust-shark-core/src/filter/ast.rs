@@ -12,6 +12,12 @@ pub enum FilterExpr {
         field: FieldPath,
         pattern: String,
     },
+    /// Free-text substring match across a packet's summary fields. This is the
+    /// fallback when the input is not a structured expression: typing any plain
+    /// text keeps only packets whose summary contains it (case-insensitive).
+    FreeText(String),
+    /// Matches packets flagged by the live threat detector (any kind).
+    Threat,
     And(Box<FilterExpr>, Box<FilterExpr>),
     Or(Box<FilterExpr>, Box<FilterExpr>),
     Not(Box<FilterExpr>),

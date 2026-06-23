@@ -16,7 +16,7 @@ pub mod udp;
 use crate::capture::{Linktype, RawPacket};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -74,6 +74,65 @@ pub struct DecodedPacket {
     pub summary: PacketSummary,
     pub process: Option<ProcessInfo>,
     pub retransmission: bool,
+    /// Live threat annotation (recon / rare-destination), set by the TUI's
+    /// `ThreatTracker` as packets arrive; `None` for benign traffic.
+    pub threat: Option<crate::analysis::threat::ThreatAnnotation>,
+}
+
+/// Direction of a packet relative to the local host: into us, out of us, or
+/// undetermined (no IP layer, or both/neither endpoint is local).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    In,
+    Out,
+    Unknown,
+}
+
+impl DecodedPacket {
+    /// Classify the packet against the local interface IP set. When `local_ips`
+    /// is empty (e.g. reading a pcap file) it falls back to a private-vs-public
+    /// heuristic: a private source talking to a public host reads as outbound.
+    pub fn direction(&self, local_ips: &[IpAddr]) -> Direction {
+        let Some((src, dst)) = self.ip_pair() else {
+            return Direction::Unknown;
+        };
+        if !local_ips.is_empty() {
+            return match (local_ips.contains(&src), local_ips.contains(&dst)) {
+                (true, false) => Direction::Out,
+                (false, true) => Direction::In,
+                _ => Direction::Unknown,
+            };
+        }
+        match (is_private_ip(src), is_private_ip(dst)) {
+            (true, false) => Direction::Out,
+            (false, true) => Direction::In,
+            _ => Direction::Unknown,
+        }
+    }
+
+    /// The (src, dst) IP pair from the first IP layer, if any.
+    pub fn ip_pair(&self) -> Option<(IpAddr, IpAddr)> {
+        for l in &self.layers {
+            match l {
+                Layer::Ipv4(ip) => return Some((IpAddr::V4(ip.src_ip), IpAddr::V4(ip.dst_ip))),
+                Layer::Ipv6(ip) => return Some((IpAddr::V6(ip.src_ip), IpAddr::V6(ip.dst_ip))),
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
+/// Private/loopback/link-local address test for the direction fallback.
+fn is_private_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local(),
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +503,7 @@ pub fn decode_packet(raw: &RawPacket) -> DecodedPacket {
         summary,
         process: None,
         retransmission: false,
+        threat: None,
     }
 }
 
@@ -742,5 +802,29 @@ mod tests {
         assert_eq!(decoded.summary.protocol, "TCP");
         assert_eq!(decoded.summary.source, "10.0.0.1");
         assert_eq!(decoded.summary.destination, "10.0.0.2");
+    }
+
+    #[test]
+    fn direction_uses_local_ips_then_heuristic() {
+        // Ethernet/IPv4/TCP, src 10.0.0.1 → dst 10.0.0.2 (both private).
+        let mut pkt = Vec::new();
+        pkt.extend_from_slice(&[0xff; 6]);
+        pkt.extend_from_slice(&[0x00, 0x11, 0x22, 0x33, 0x44, 0x55]);
+        pkt.extend_from_slice(&[0x08, 0x00]);
+        pkt.extend_from_slice(&[
+            0x45, 0x00, 0x00, 0x28, 0x00, 0x01, 0x00, 0x00, 0x40, 0x06, 0x00, 0x00, 10, 0, 0, 1, 10,
+            0, 0, 2,
+        ]);
+        pkt.extend_from_slice(&[
+            0x00, 0x50, 0x30, 0x39, 0x00, 0x00, 0x03, 0xe8, 0x00, 0x00, 0x00, 0x00, 0x50, 0x02,
+            0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+        ]);
+        let decoded = decode_packet(&make_raw(pkt, Linktype::Ethernet));
+        let a: std::net::IpAddr = "10.0.0.1".parse().unwrap();
+        let b: std::net::IpAddr = "10.0.0.2".parse().unwrap();
+        assert_eq!(decoded.direction(&[a]), Direction::Out);
+        assert_eq!(decoded.direction(&[b]), Direction::In);
+        // No local IPs and both endpoints private → Unknown.
+        assert_eq!(decoded.direction(&[]), Direction::Unknown);
     }
 }
