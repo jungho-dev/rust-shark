@@ -1,7 +1,7 @@
 # rust-shark
 
 [![Crates.io](https://img.shields.io/crates/v/rust-shark.svg)](https://crates.io/crates/rust-shark)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.md)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](license.md)
 
 A Wireshark-style packet analyzer that runs in the terminal — **and** an
 always-on, local-first **egress monitor** that answers "what is my machine

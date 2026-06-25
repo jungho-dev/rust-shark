@@ -1,7 +1,7 @@
 # rust-shark
 
 [![Crates.io](https://img.shields.io/crates/v/rust-shark.svg)](https://crates.io/crates/rust-shark)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE.md)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](license.md)
 
 터미널에서 동작하는 Wireshark 스타일 packet analyzer이자, **동시에** 항상 켜져 있는
 local-first **egress monitor**로서 "내 머신이 무엇과 통신하고 있으며, 그중 새로운 것이
