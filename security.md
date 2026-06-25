@@ -7,4 +7,4 @@
 
 ## Supported
 
-* The latest release on the default branch (`main`)
+* The latest release on the default branch (`public/main` / `private/main`)

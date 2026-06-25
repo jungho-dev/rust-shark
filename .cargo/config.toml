@@ -1,6 +1,6 @@
-# 기본 빌드 타깃: gnullvm (llvm-mingw + clang). gnu 툴체인 sysroot에 gnullvm std 수동 반입됨.
-[build]
-target = "x86_64-pc-windows-gnullvm"
+# build.target 미지정: host 툴체인(x86_64-pc-windows-gnullvm)으로 빌드되어 산출물이
+# target/release 에 직접 생성된다. linker/env/rustflags 는 실제 컴파일 타깃(gnullvm)에
+# 매칭되어 그대로 적용된다. (gnu 툴체인 sysroot에 gnullvm std 수동 반입됨.)
 
 [env]
 # cc-rs(libsqlite3-sys 등 C 컴파일)가 PATH 의존 없이 llvm-mingw clang/ar를 쓰도록 절대경로 지정.
