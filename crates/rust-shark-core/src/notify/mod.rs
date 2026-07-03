@@ -26,11 +26,21 @@ impl Notifier for OsNotifier {
                 applescript_quote(body),
                 applescript_quote(&title)
             );
-            let _ = Command::new("osascript").arg("-e").arg(script).spawn();
+            // Reap the child off-thread; a dropped Child is never waited on and
+            // would accumulate zombies under the always-on daemon.
+            if let Ok(mut child) = Command::new("osascript").arg("-e").arg(script).spawn() {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
         }
         #[cfg(target_os = "linux")]
         {
-            let _ = Command::new("notify-send").arg(&title).arg(body).spawn();
+            if let Ok(mut child) = Command::new("notify-send").arg(&title).arg(body).spawn() {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {

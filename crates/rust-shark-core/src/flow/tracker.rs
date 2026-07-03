@@ -15,9 +15,9 @@ const MAX_UNACKED: usize = 256;
 
 /// Tracks live TCP/UDP flows: byte/packet accounting per direction, TCP
 /// retransmission detection, and RTT estimation. Flows are evicted on
-/// FIN/FIN/RST; when a completion sink is registered the final
-/// [`FlowStatsSnapshot`] is emitted before eviction so the daemon never loses a
-/// closed connection's totals.
+/// FIN/FIN/RST or when a full table drops its LRU entry; when a completion
+/// sink is registered the final [`FlowStatsSnapshot`] is emitted before either
+/// eviction so the daemon never loses a connection's totals.
 pub struct FlowTracker {
     flows: LruCache<FlowKey, FlowState>,
     local_addrs: HashSet<IpAddr>,
@@ -70,6 +70,16 @@ impl FlowTracker {
         let ts = pkt.timestamp;
         let wire = pkt.wire_len;
         let first_seen = !self.flows.contains(&key);
+        // A full LRU table silently drops its oldest flow on insert; emit that
+        // flow's final snapshot first so the completion sink (and the daemon's
+        // live/meta tables keyed on it) never leaks an evicted flow.
+        if first_seen && self.flows.len() >= MAX_FLOWS {
+            if let Some((old_key, old_state)) = self.flows.pop_lru() {
+                if let Some(tx) = &self.completed_tx {
+                    let _ = tx.send(self.make_snapshot(&old_key, &old_state));
+                }
+            }
+        }
 
         let (annotation, should_close) = {
             let state = self
@@ -90,14 +100,14 @@ impl FlowTracker {
             if let Some(tcp) = info.tcp {
                 let mut is_retransmission = false;
                 if tcp.payload_len > 0 {
-                    let seq_end = tcp.seq as u64 + tcp.payload_len as u64;
+                    let seq_end = tcp.seq.wrapping_add(tcp.payload_len as u32);
                     let max_seq = if is_low {
                         &mut state.max_seq_low
                     } else {
                         &mut state.max_seq_high
                     };
                     match *max_seq {
-                        Some(prev) if seq_end <= prev => is_retransmission = true,
+                        Some(prev) if seq_wrapping_leq(seq_end, prev) => is_retransmission = true,
                         _ => *max_seq = Some(seq_end),
                     }
                 }
@@ -287,6 +297,12 @@ fn extract_pkt_flow_info(layers: &[Layer]) -> Option<PktFlowInfo> {
         }
     }
     None
+}
+
+/// Serial-number style `a <= b` over the 32-bit TCP sequence space, so
+/// retransmission detection survives sequence wrap on 4GB+ flows.
+fn seq_wrapping_leq(a: u32, b: u32) -> bool {
+    a.wrapping_sub(b) as i32 <= 0
 }
 
 /// Update RTT estimates from one TCP segment: handshake RTT (SYN→SYN/ACK) and
@@ -637,5 +653,48 @@ mod tests {
         let key = FlowKey::new(IpAddr::V4(client), 50000, IpAddr::V4(server), 443, 6);
         let rtt = tracker.stats_for(&key).unwrap().handshake_rtt_ms.unwrap();
         assert!((rtt - 20.0).abs() < 0.5, "handshake rtt = {rtt}");
+    }
+
+    #[test]
+    fn test_seq_wrap_not_retransmission() {
+        let mut tracker = FlowTracker::new();
+        let src = Ipv4Addr::new(10, 0, 0, 1);
+        let dst = Ipv4Addr::new(10, 0, 0, 2);
+
+        // Segment ending just past the 2^32 wrap…
+        let mut p1 = make_tcp_packet(src, dst, 80, 12345, u32::MAX - 50, 100, false, false, false);
+        let u1 = tracker.update(&mut p1).unwrap();
+        assert!(!u1.annotation.unwrap().is_retransmission);
+
+        // …then the next in-order segment with a small wrapped sequence number.
+        let mut p2 = make_tcp_packet(src, dst, 80, 12345, 49, 100, false, false, false);
+        let u2 = tracker.update(&mut p2).unwrap();
+        assert!(
+            !u2.annotation.unwrap().is_retransmission,
+            "a wrapped sequence must not be flagged as a retransmission"
+        );
+    }
+
+    #[test]
+    fn test_lru_eviction_emits_completion_snapshot() {
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let mut tracker = FlowTracker::new().with_completion_sink(tx);
+        let src = Ipv4Addr::new(10, 0, 0, 1);
+        let dst = Ipv4Addr::new(10, 0, 0, 2);
+
+        // Fill the table to capacity with distinct UDP flows, then insert one more.
+        for port in 1..=10_001u16 {
+            let mut p = make_udp_packet(src, dst, port, 53);
+            tracker.update(&mut p);
+        }
+
+        // The overflow insert evicted exactly one LRU flow and emitted its snapshot.
+        assert_eq!(tracker.len(), 10_000);
+        let snap = rx.try_recv().expect("evicted flow snapshot");
+        assert_eq!(snap.local_port, Some(1));
+        assert!(
+            rx.try_recv().is_err(),
+            "only the evicted flow may be emitted"
+        );
     }
 }

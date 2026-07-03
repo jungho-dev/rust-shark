@@ -192,7 +192,7 @@ fn decode_int(buf: &[u8], mut pos: usize, prefix: u32) -> Option<(usize, usize)>
 fn decode_str(buf: &[u8], pos: usize) -> Option<(String, usize)> {
     let huffman = (*buf.get(pos)? & 0x80) != 0;
     let (len, p) = decode_int(buf, pos, 7)?;
-    let bytes = buf.get(p..p + len)?;
+    let bytes = buf.get(p..p.checked_add(len)?)?;
     let s = if huffman {
         format!("<huffman:{}b>", bytes.len())
     } else {

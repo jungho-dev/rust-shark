@@ -57,9 +57,13 @@ pub(crate) fn capture_loop<T: pcap::Activated + Send>(
             Ok(packet) => {
                 let num = counter.fetch_add(1, Ordering::Relaxed);
                 let ts = packet.header.ts;
+                // A crafted/corrupt pcap can carry an out-of-range tv_usec; widen
+                // before the *1000 so the multiply cannot overflow, then clamp to ns.
+                let nsec = (ts.tv_usec as i64)
+                    .saturating_mul(1000)
+                    .clamp(0, 999_999_999) as u32;
                 let timestamp =
-                    DateTime::from_timestamp(ts.tv_sec as i64, (ts.tv_usec * 1000) as u32)
-                        .unwrap_or_default();
+                    DateTime::from_timestamp(ts.tv_sec as i64, nsec).unwrap_or_default();
                 let raw = RawPacket {
                     number: num,
                     timestamp,

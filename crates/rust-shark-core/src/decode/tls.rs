@@ -24,7 +24,9 @@ fn parse_tls_record(data: &[u8], offset: usize) -> Option<TlsRecord<'_>> {
     let hs_len =
         ((data[hs + 1] as usize) << 16) | ((data[hs + 2] as usize) << 8) | (data[hs + 3] as usize);
     let body_start = hs + 4;
-    let body_end = body_start + hs_len;
+    // Cap the handshake body at the record boundary so an oversized hs_len
+    // (a message spanning records) cannot bleed into the next record's bytes.
+    let body_end = (body_start + hs_len).min(hs + record_len);
     if body_end > data.len() {
         return None;
     }

@@ -37,7 +37,7 @@ pub fn render_filter_bar(frame: &mut ratatui::Frame, area: Rect, app: &App) {
         InputMode::FilterInput => {
             let mut display = app.filter_input.clone();
             // Show cursor position
-            if app.filter_cursor <= display.len() {
+            if display.is_char_boundary(app.filter_cursor) {
                 display.insert(app.filter_cursor, '\u{2502}');
             }
             (

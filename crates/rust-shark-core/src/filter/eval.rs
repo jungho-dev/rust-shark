@@ -116,23 +116,19 @@ fn extract_field(field: &FieldPath, layers: &[Layer]) -> Option<FilterValue> {
 
 fn match_port_either(layers: &[Layer], op: CompareOp, value: &FilterValue, is_tcp: bool) -> bool {
     for layer in layers {
-        match (is_tcp, layer) {
-            (true, Layer::Tcp(tcp)) => {
-                let src = FilterValue::Integer(tcp.src_port as i64);
-                let dst = FilterValue::Integer(tcp.dst_port as i64);
-                if compare_values(&src, op, value) || compare_values(&dst, op, value) {
-                    return true;
-                }
-            }
-            (false, Layer::Udp(udp)) => {
-                let src = FilterValue::Integer(udp.src_port as i64);
-                let dst = FilterValue::Integer(udp.dst_port as i64);
-                if compare_values(&src, op, value) || compare_values(&dst, op, value) {
-                    return true;
-                }
-            }
-            _ => {}
-        }
+        let (src_port, dst_port) = match (is_tcp, layer) {
+            (true, Layer::Tcp(tcp)) => (tcp.src_port, tcp.dst_port),
+            (false, Layer::Udp(udp)) => (udp.src_port, udp.dst_port),
+            _ => continue,
+        };
+        let src = FilterValue::Integer(src_port as i64);
+        let dst = FilterValue::Integer(dst_port as i64);
+        // `!= N` means the port is absent on both sides (AND); `== N` matches
+        // when either side carries it (OR).
+        return match op {
+            CompareOp::Ne => compare_values(&src, op, value) && compare_values(&dst, op, value),
+            _ => compare_values(&src, op, value) || compare_values(&dst, op, value),
+        };
     }
     false
 }
@@ -268,6 +264,20 @@ mod tests {
             &pkt
         ));
         assert!(!eval_filter(&parse_filter("tcp.port == 80").unwrap(), &pkt));
+    }
+
+    #[test]
+    fn test_port_ne_excludes_when_either_side_matches() {
+        let pkt = make_tcp_packet(); // ports 443 / 50000
+        assert!(!eval_filter(
+            &parse_filter("tcp.port != 443").unwrap(),
+            &pkt
+        ));
+        assert!(!eval_filter(
+            &parse_filter("tcp.port != 50000").unwrap(),
+            &pkt
+        ));
+        assert!(eval_filter(&parse_filter("tcp.port != 80").unwrap(), &pkt));
     }
 
     #[test]

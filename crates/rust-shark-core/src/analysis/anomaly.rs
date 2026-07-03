@@ -166,6 +166,8 @@ mod tests {
             host: None,
             content_length: None,
             chunked: false,
+            query_params: Vec::new(),
+            body_params: Vec::new(),
             header_range: (0, 0),
         })
     }

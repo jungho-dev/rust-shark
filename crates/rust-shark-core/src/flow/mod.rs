@@ -59,8 +59,8 @@ pub enum Dir {
 #[derive(Debug, Clone)]
 pub struct FlowState {
     // Retransmission detection (TCP only).
-    pub max_seq_low: Option<u64>,
-    pub max_seq_high: Option<u64>,
+    pub max_seq_low: Option<u32>,
+    pub max_seq_high: Option<u32>,
     pub fin_low: bool,
     pub fin_high: bool,
     pub rst_seen: bool,

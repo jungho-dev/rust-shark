@@ -275,8 +275,7 @@ impl App {
             });
             return;
         }
-        let pkts: Vec<&DecodedPacket> =
-            (0..count).filter_map(|i| self.visible_packet(i)).collect();
+        let pkts: Vec<&DecodedPacket> = (0..count).filter_map(|i| self.visible_packet(i)).collect();
         let fname = format!(
             "rust-shark-{}.log",
             chrono::Utc::now().format("%Y%m%d-%H%M%S")
@@ -305,6 +304,16 @@ fn push_capped(ring: &mut VecDeque<u64>, value: u64, cap: usize) {
     }
 }
 
+// Filter-cursor char widths: the cursor is a byte index that must always land
+// on a UTF-8 char boundary, so moves step by whole characters (±1 byte panics
+// on multibyte input).
+fn prev_char_width(s: &str, at: usize) -> usize {
+    s[..at].chars().next_back().map_or(1, |c| c.len_utf8())
+}
+fn next_char_width(s: &str, at: usize) -> usize {
+    s[at..].chars().next().map_or(1, |c| c.len_utf8())
+}
+
 pub fn run_tui(
     rx: Receiver<DecodedPacket>,
     buffer_size: usize,
@@ -315,7 +324,12 @@ pub fn run_tui(
 ) -> anyhow::Result<()> {
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, cursor::Hide)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        cursor::Hide
+    )?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -585,18 +599,18 @@ fn handle_key_event(app: &mut App, key: event::KeyEvent) -> bool {
                 app.mode = InputMode::Normal;
             }
             KeyCode::Backspace if app.filter_cursor > 0 => {
-                app.filter_cursor -= 1;
+                app.filter_cursor -= prev_char_width(&app.filter_input, app.filter_cursor);
                 app.filter_input.remove(app.filter_cursor);
             }
             KeyCode::Left if app.filter_cursor > 0 => {
-                app.filter_cursor -= 1;
+                app.filter_cursor -= prev_char_width(&app.filter_input, app.filter_cursor);
             }
             KeyCode::Right if app.filter_cursor < app.filter_input.len() => {
-                app.filter_cursor += 1;
+                app.filter_cursor += next_char_width(&app.filter_input, app.filter_cursor);
             }
             KeyCode::Char(c) => {
                 app.filter_input.insert(app.filter_cursor, c);
-                app.filter_cursor += 1;
+                app.filter_cursor += c.len_utf8();
             }
             _ => {}
         },
@@ -746,10 +760,8 @@ fn select_row_by_mouse(app: &mut App, col: u16, row: u16) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let inside = col >= area.x
-        && col < area.x + area.width
-        && row >= area.y
-        && row < area.y + area.height;
+    let inside =
+        col >= area.x && col < area.x + area.width && row >= area.y && row < area.y + area.height;
     if !inside {
         return;
     }
@@ -830,12 +842,16 @@ fn drain_packets(app: &mut App, rx: &Receiver<DecodedPacket>) {
     }
 
     // LIVE follow pins the view to the newest packet; in BROWSE mode the
-    // selection stays put so clicks/scrolling work while capture continues.
+    // selection stays put so clicks/scrolling work while capture continues,
+    // but ring eviction can shrink the visible set — keep the selection in
+    // range so the list/detail panes don't go blank.
+    let count = app.visible_count();
     if app.follow {
-        let count = app.visible_count();
         if count > 0 {
             app.selected = count - 1;
         }
+    } else {
+        app.selected = app.selected.min(count.saturating_sub(1));
     }
 }
 
@@ -907,7 +923,6 @@ fn render_frame(frame: &mut ratatui::Frame, app: &mut App) {
         app.list_area = main_area;
         packet_list::render_packet_list(frame, main_area, app);
     }
-
     if app.show_hex {
         hex_view::render_hex_view(frame, rows[idx], app);
         idx += 1;
@@ -1071,7 +1086,7 @@ mod tests {
                 data: vec![0u8; 64],
                 linktype: Linktype::Ethernet,
             };
-            app.packets.push(decode_packet(&raw));
+            app.packets.push(decode_packet(raw));
         }
         app.selected = 30;
         draw_all(&mut app, 120, 40);
@@ -1100,7 +1115,7 @@ mod tests {
                 data: vec![0u8; 64],
                 linktype: Linktype::Ethernet,
             };
-            app.packets.push(decode_packet(&raw));
+            app.packets.push(decode_packet(raw));
         }
     }
 
@@ -1146,5 +1161,57 @@ mod tests {
         );
         // rel = 19 - 2 = 17 → 17 * 99 / 17 = 99 (bottom cell → last row).
         assert_eq!(app.selected, 99);
+    }
+
+    // Multibyte (e.g. Korean) filter input must keep the byte cursor on char
+    // boundaries through insert / arrow / backspace, and render without panic.
+    #[test]
+    fn multibyte_filter_input_keeps_char_boundaries() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let mut app = App::new(16);
+        handle_key_event(&mut app, key(KeyCode::Char('/'), KeyEventKind::Press));
+        assert_eq!(app.mode, InputMode::FilterInput);
+
+        for c in ['한', 'g', '글'] {
+            handle_key_event(&mut app, key(KeyCode::Char(c), KeyEventKind::Press));
+        }
+        assert_eq!(app.filter_input, "한g글");
+        assert_eq!(app.filter_cursor, app.filter_input.len());
+
+        // Move between the multibyte chars and edit there.
+        handle_key_event(&mut app, key(KeyCode::Left, KeyEventKind::Press));
+        handle_key_event(&mut app, key(KeyCode::Left, KeyEventKind::Press));
+        handle_key_event(&mut app, key(KeyCode::Char('ä'), KeyEventKind::Press));
+        assert_eq!(app.filter_input, "한äg글");
+        handle_key_event(&mut app, key(KeyCode::Backspace, KeyEventKind::Press));
+        assert_eq!(app.filter_input, "한g글");
+
+        // Rendering draws the cursor at the (mid-string) byte offset.
+        let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        term.draw(|f| render_frame(f, &mut app)).unwrap();
+    }
+
+    // BROWSE mode + ring eviction: the selection must be re-clamped when the
+    // visible set shrinks, otherwise the list/detail panes go blank.
+    #[test]
+    fn browse_selection_clamped_when_ring_evicts() {
+        let mut app = App::new(4);
+        populate(&mut app, 4);
+        app.follow = false;
+        app.selected = 3;
+
+        // Push more packets through the drain path; capacity 4 evicts old ones.
+        let (tx, rx) = crossbeam_channel::unbounded();
+        drop(tx);
+        drain_packets(&mut app, &rx);
+        assert!(app.selected < app.visible_count().max(1));
+
+        // Shrink the visible set below the selection via a filter rebuild.
+        app.selected = 3;
+        app.filtered_indices = Some(vec![0]);
+        drain_packets(&mut app, &rx);
+        assert_eq!(app.selected, 0);
     }
 }

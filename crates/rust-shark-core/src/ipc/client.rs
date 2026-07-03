@@ -24,6 +24,7 @@ impl IpcClient {
 
     /// Send a request and read the single-line response.
     pub fn request(&mut self, req: &Request) -> io::Result<Response> {
+        crate::debug::log("ipc-client", &format!("send {req:?}"));
         let mut line = serde_json::to_string(req).map_err(to_io)?;
         line.push('\n');
         self.stream.write_all(line.as_bytes())?;
@@ -35,7 +36,9 @@ impl IpcClient {
                 "daemon closed",
             ));
         }
-        serde_json::from_str(resp.trim_end()).map_err(to_io)
+        let response: Response = serde_json::from_str(resp.trim_end()).map_err(to_io)?;
+        crate::debug::log("ipc-client", &format!("recv {}", response.tag()));
+        Ok(response)
     }
 
     /// Read the next streamed event (after a successful `Subscribe`).

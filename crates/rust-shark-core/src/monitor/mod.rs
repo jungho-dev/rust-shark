@@ -42,6 +42,21 @@ pub struct MonitorConfig {
 /// Run the daemon until `stop` is set. Spawns capture + IPC-server threads and
 /// runs the correlate/detect worker on the calling thread.
 pub fn run_monitor(cfg: MonitorConfig, stop: Arc<AtomicBool>) -> anyhow::Result<()> {
+    crate::debug::log(
+        "monitor",
+        &format!(
+            "interface={} bpf={:?} snaplen={} db={} socket={} geoip_country={:?} geoip_asn={:?} notify={} learning_window={:?}",
+            cfg.interface,
+            cfg.bpf,
+            cfg.snaplen,
+            cfg.db_path.display(),
+            cfg.socket_path.display(),
+            cfg.geoip_country,
+            cfg.geoip_asn,
+            cfg.notify,
+            cfg.alert.learning_window,
+        ),
+    );
     let store = Arc::new(Mutex::new(
         Store::open(&cfg.db_path).context("opening store")?,
     ));

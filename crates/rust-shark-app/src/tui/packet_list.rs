@@ -87,7 +87,10 @@ pub fn render_packet_list(frame: &mut ratatui::Frame, area: Rect, app: &App) {
                     ThreatKind::RareExternal => {
                         Style::default().fg(theme::BASE_BG).bg(theme::WARN).bold()
                     }
-                    _ => Style::default().fg(theme::TEXT_STRONG).bg(theme::ALERT).bold(),
+                    _ => Style::default()
+                        .fg(theme::TEXT_STRONG)
+                        .bg(theme::ALERT)
+                        .bold(),
                 }
             } else if matches_search {
                 theme::search_row()
@@ -154,12 +157,12 @@ pub fn render_packet_list(frame: &mut ratatui::Frame, area: Rect, app: &App) {
             // Info: drop the leading "sport → dport" token for TCP/UDP (the ports
             // now live in the IP column); prepend a threat or anomaly tag. The
             // original summary.info is untouched so search/filter still see ports.
-            let base_info: &str = if matches!(pkt.summary.color_hint, ColorHint::Tcp | ColorHint::Udp)
-            {
-                strip_leading_ports(&pkt.summary.info)
-            } else {
-                &pkt.summary.info
-            };
+            let base_info: &str =
+                if matches!(pkt.summary.color_hint, ColorHint::Tcp | ColorHint::Udp) {
+                    strip_leading_ports(&pkt.summary.info)
+                } else {
+                    &pkt.summary.info
+                };
             let info_full = match (&pkt.threat, &anomaly) {
                 (Some(t), _) => {
                     format!("\u{26a0} [{}] {} — {}", t.kind.label(), base_info, t.detail)

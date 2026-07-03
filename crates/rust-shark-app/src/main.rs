@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// 0. constants ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+// 0. constants -------------------------------------------------------------------------
 const CHANNEL_CAPACITY: usize = 10_000;
 
 fn read_pcap(path: &std::path::PathBuf) -> Result<Vec<decode::DecodedPacket>> {
@@ -23,7 +23,7 @@ fn read_pcap(path: &std::path::PathBuf) -> Result<Vec<decode::DecodedPacket>> {
     let handle = capture::file::start_file_capture(path, None, tx, stop.clone())?;
     let mut out = Vec::new();
     while let Ok(raw) = rx.recv() {
-        out.push(decode::decode_packet(&raw));
+        out.push(decode::decode_packet(raw));
     }
     let _ = handle.join();
     Ok(out)
@@ -135,7 +135,8 @@ fn monitor_cmd(action: MonitorAction) -> Result<()> {
                 AlertConfig::default()
             };
             eprintln!(
-                "rust-shark monitor: interface={interface} db={} socket={}",
+                "rust-shark monitor: interface={interface} filter={filter:?} snaplen={snaplen} demo={demo} daemonize={daemonize} notify={} db={} socket={} geoip_country={geoip_country_db:?} geoip_asn={geoip_asn_db:?}",
+                !no_notify,
                 paths.db.display(),
                 paths.socket.display()
             );
@@ -259,7 +260,7 @@ fn decode_thread(
     while !stop.load(Ordering::Relaxed) {
         match raw_rx.recv_timeout(std::time::Duration::from_millis(100)) {
             Ok(raw) => {
-                let mut decoded = decode::decode_packet(&raw);
+                let mut decoded = decode::decode_packet(raw);
 
                 flow_tracker.update(&mut decoded);
 
@@ -351,7 +352,7 @@ fn json_output_loop(
     stop.store(true, Ordering::Relaxed);
     Ok(())
 }
-// 99. main ―――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+// 99. main -----------------------------------------------------------------------------
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let config = core::config::Config::load();
@@ -396,6 +397,12 @@ fn main() -> Result<()> {
 
             let local_ips = interface_ips(&interface);
 
+            // Effective capture parameters, always echoed to stderr at startup
+            // (does not corrupt --json stdout). RUST_SHARK_DEBUG adds IPC tracing.
+            eprintln!(
+                "rust-shark capture: interface={interface} filter={filter:?} snaplen={snaplen} buffer_size={buffer_size} write={write:?} pcapng={pcapng} json={json} count={count:?} duration={duration:?} local_ips={local_ips:?}"
+            );
+
             let stop = Arc::new(AtomicBool::new(false));
 
             let (raw_tx, raw_rx) = bounded(CHANNEL_CAPACITY);
@@ -437,6 +444,11 @@ fn main() -> Result<()> {
             json,
             buffer_size,
         } => {
+            eprintln!(
+                "rust-shark read: file={} filter={filter:?} json={json} buffer_size={buffer_size}",
+                file.display()
+            );
+
             let stop = Arc::new(AtomicBool::new(false));
 
             let (raw_tx, raw_rx) = bounded(CHANNEL_CAPACITY);
@@ -453,7 +465,14 @@ fn main() -> Result<()> {
             if json {
                 json_output_loop(decoded_rx, stop.clone(), None, None)?;
             } else {
-                tui::run_tui(decoded_rx, buffer_size, None, config.filters.clone(), false, Vec::new())?;
+                tui::run_tui(
+                    decoded_rx,
+                    buffer_size,
+                    None,
+                    config.filters.clone(),
+                    false,
+                    Vec::new(),
+                )?;
             }
             stop.store(true, Ordering::Relaxed);
             let _ = capture_handle.join();

@@ -104,8 +104,14 @@ impl AlertEngine {
     }
 
     /// Run all detectors; returns fired alerts plus the resolved process/dest
-    /// row ids (for connection-history insertion in the daemon).
+    /// row ids (for connection-history insertion in the daemon). The whole
+    /// evaluation runs in one SQLite transaction: one commit per event instead
+    /// of one per statement, and no partial baseline rows on mid-event errors.
     pub fn evaluate_full(&self, store: &Store, ev: &FlowEvent) -> Result<EvalOutcome, StoreError> {
+        store.with_tx(|s| self.run_detectors(s, ev))
+    }
+
+    fn run_detectors(&self, store: &Store, ev: &FlowEvent) -> Result<EvalOutcome, StoreError> {
         let state = baseline::ensure_started(store, &self.cfg, ev.ts)?;
         let active = state == BaselineState::Active;
         let mut alerts = Vec::new();

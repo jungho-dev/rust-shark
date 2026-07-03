@@ -45,12 +45,12 @@ impl Bus {
 
     pub fn subscribe(&self) -> Receiver<Event> {
         let (tx, rx) = bounded(1024);
-        self.subs.lock().unwrap().push(tx);
+        self.subs.lock().unwrap_or_else(|e| e.into_inner()).push(tx);
         rx
     }
 
     pub fn broadcast(&self, ev: &Event) {
-        let mut subs = self.subs.lock().unwrap();
+        let mut subs = self.subs.lock().unwrap_or_else(|e| e.into_inner());
         subs.retain(|tx| !matches!(tx.try_send(ev.clone()), Err(TrySendError::Disconnected(_))));
     }
 }
@@ -101,7 +101,10 @@ fn handle_conn(stream: UnixStream, ctx: Arc<ServerCtx>) -> io::Result<()> {
             break;
         }
         let req: Request = match serde_json::from_str(line.trim_end()) {
-            Ok(r) => r,
+            Ok(r) => {
+                crate::debug::log("ipc-server", &format!("recv {r:?}"));
+                r
+            }
             Err(e) => {
                 write_resp(
                     &mut writer,
@@ -132,6 +135,7 @@ fn handle_conn(stream: UnixStream, ctx: Arc<ServerCtx>) -> io::Result<()> {
             }
             other => {
                 let resp = handle_query(&ctx, other);
+                crate::debug::log("ipc-server", &format!("send {}", resp.tag()));
                 write_resp(&mut writer, &resp)?;
             }
         }
@@ -140,7 +144,7 @@ fn handle_conn(stream: UnixStream, ctx: Arc<ServerCtx>) -> io::Result<()> {
 }
 
 fn handle_query(ctx: &ServerCtx, req: Request) -> Response {
-    let store = ctx.store.lock().unwrap();
+    let store = ctx.store.lock().unwrap_or_else(|e| e.into_inner());
     match req {
         Request::Status => {
             let (processes, destinations, alerts) = store.counts().unwrap_or((0, 0, 0));
@@ -162,7 +166,12 @@ fn handle_query(ctx: &ServerCtx, req: Request) -> Response {
                 version: env!("CARGO_PKG_VERSION").to_string(),
             })
         }
-        Request::LiveConnections => Response::Connections(ctx.live.lock().unwrap().snapshot()),
+        Request::LiveConnections => Response::Connections(
+            ctx.live
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .snapshot(),
+        ),
         Request::ListProcesses => match store.list_processes() {
             Ok(v) => Response::Processes(v),
             Err(e) => err(e),

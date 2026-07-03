@@ -84,6 +84,24 @@ pub enum Response {
     Error { message: String },
 }
 
+impl Response {
+    /// Short variant name for debug tracing, so logs never dump large payloads
+    /// (connection/alert/history vectors).
+    pub fn tag(&self) -> &'static str {
+        match self {
+            Response::Status(_) => "status",
+            Response::Connections(_) => "connections",
+            Response::Processes(_) => "processes",
+            Response::Destinations(_) => "destinations",
+            Response::History(_) => "history",
+            Response::Alerts(_) => "alerts",
+            Response::Subscribed => "subscribed",
+            Response::Stopping => "stopping",
+            Response::Error { .. } => "error",
+        }
+    }
+}
+
 /// Pushed to a subscribed connection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

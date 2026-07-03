@@ -418,6 +418,11 @@ pub struct HttpInfo {
     pub host: Option<String>,
     pub content_length: Option<usize>,
     pub chunked: bool,
+    /// Decoded `?a=1&b=2` request-URI query parameters (requests only).
+    pub query_params: Vec<(String, String)>,
+    /// Decoded request-body parameters when the body is form-urlencoded or a
+    /// JSON object and fits in the captured segment (top-level fields only).
+    pub body_params: Vec<(String, String)>,
     pub header_range: (usize, usize),
 }
 
@@ -491,14 +496,14 @@ pub struct TransportHint {
 // Decoder chain driver
 // ---------------------------------------------------------------------------
 
-pub fn decode_packet(raw: &RawPacket) -> DecodedPacket {
+pub fn decode_packet(raw: RawPacket) -> DecodedPacket {
     let layers = decode_layers(&raw.data, raw.linktype);
     let summary = compute_summary(&layers, raw.wire_len);
     DecodedPacket {
         number: raw.number,
         timestamp: raw.timestamp,
         wire_len: raw.wire_len,
-        data: raw.data.clone(),
+        data: raw.data,
         layers,
         summary,
         process: None,
@@ -794,7 +799,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, // checksum, urgent
         ]);
 
-        let decoded = decode_packet(&make_raw(pkt, Linktype::Ethernet));
+        let decoded = decode_packet(make_raw(pkt, Linktype::Ethernet));
         assert!(decoded.layers.len() >= 3);
         assert!(matches!(decoded.layers[0], Layer::Ethernet(_)));
         assert!(matches!(decoded.layers[1], Layer::Ipv4(_)));
@@ -812,14 +817,14 @@ mod tests {
         pkt.extend_from_slice(&[0x00, 0x11, 0x22, 0x33, 0x44, 0x55]);
         pkt.extend_from_slice(&[0x08, 0x00]);
         pkt.extend_from_slice(&[
-            0x45, 0x00, 0x00, 0x28, 0x00, 0x01, 0x00, 0x00, 0x40, 0x06, 0x00, 0x00, 10, 0, 0, 1, 10,
-            0, 0, 2,
+            0x45, 0x00, 0x00, 0x28, 0x00, 0x01, 0x00, 0x00, 0x40, 0x06, 0x00, 0x00, 10, 0, 0, 1,
+            10, 0, 0, 2,
         ]);
         pkt.extend_from_slice(&[
             0x00, 0x50, 0x30, 0x39, 0x00, 0x00, 0x03, 0xe8, 0x00, 0x00, 0x00, 0x00, 0x50, 0x02,
             0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
         ]);
-        let decoded = decode_packet(&make_raw(pkt, Linktype::Ethernet));
+        let decoded = decode_packet(make_raw(pkt, Linktype::Ethernet));
         let a: std::net::IpAddr = "10.0.0.1".parse().unwrap();
         let b: std::net::IpAddr = "10.0.0.2".parse().unwrap();
         assert_eq!(decoded.direction(&[a]), Direction::Out);

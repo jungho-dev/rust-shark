@@ -345,6 +345,24 @@ fn detail_lines(layer: &Layer) -> Vec<Line<'static>> {
                     field_style,
                 )));
             }
+            for (k, v) in &h.query_params {
+                lines.push(Line::from(Span::styled(
+                    format!("    Query · {k}: {v}"),
+                    field_style,
+                )));
+            }
+            if !h.body_params.is_empty() {
+                lines.push(Line::from(Span::styled(
+                    "    Body Parameters:".to_string(),
+                    header_style,
+                )));
+                for (k, v) in &h.body_params {
+                    lines.push(Line::from(Span::styled(
+                        format!("        {k}: {v}"),
+                        field_style,
+                    )));
+                }
+            }
         }
         Layer::Http2(h2) => {
             lines.push(Line::from(Span::styled(

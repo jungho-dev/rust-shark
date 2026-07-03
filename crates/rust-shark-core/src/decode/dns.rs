@@ -45,7 +45,6 @@ pub fn try_decode_dns(data: &[u8], offset: usize) -> Option<DnsInfo> {
             qclass,
         });
     }
-
     if questions.is_empty() {
         return None;
     }

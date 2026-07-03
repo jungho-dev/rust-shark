@@ -60,7 +60,7 @@ pub fn run_worker(raw_rx: Receiver<RawPacket>, ctx: WorkerCtx, stop: Arc<AtomicB
         }
         match raw_rx.recv_timeout(Duration::from_millis(200)) {
             Ok(raw) => {
-                let mut decoded = decode_packet(&raw);
+                let mut decoded = decode_packet(raw);
                 resolver.observe_packet(&decoded);
                 let ts_ms = decoded.timestamp.timestamp_millis();
                 if let Some(upd) = tracker.update(&mut decoded) {
@@ -244,9 +244,12 @@ fn persist_closed(
         ts_start_ms: snap.first_seen.timestamp_millis(),
         ts_end_ms: snap.last_seen.timestamp_millis(),
     };
-    let _ = ctx
+    if let Err(e) = ctx
         .store
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .insert_connection(&row);
+        .insert_connection(&row)
+    {
+        eprintln!("rust-shark monitor: insert_connection failed: {e}");
+    }
 }

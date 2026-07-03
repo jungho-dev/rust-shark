@@ -48,6 +48,22 @@ impl Store {
         Ok(Self { conn })
     }
 
+    /// Run `f` inside one SQLite transaction: a single commit instead of one
+    /// implicit commit per statement, and a rollback when `f` fails.
+    pub fn with_tx<T>(&self, f: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        match f(self) {
+            Ok(v) => {
+                self.conn.execute_batch("COMMIT")?;
+                Ok(v)
+            }
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
     fn init(&mut self) -> Result<()> {
         self.conn.execute_batch(
             "PRAGMA journal_mode = WAL;

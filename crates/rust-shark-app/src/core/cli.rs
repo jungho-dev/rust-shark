@@ -6,6 +6,16 @@ use clap::{Parser, Subcommand};
 pub const DEFAULT_SNAPLEN: i32 = 65535;
 pub const DEFAULT_BUFFER_SIZE: usize = 100_000;
 
+/// `--buffer-size 0` would make the packet ring silently keep a single packet;
+/// reject it at parse time instead.
+fn parse_buffer_size(s: &str) -> Result<usize, String> {
+    let v: usize = s.parse().map_err(|e| format!("{e}"))?;
+    if v == 0 {
+        return Err("buffer size must be at least 1".into());
+    }
+    Ok(v)
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "rust-shark",
@@ -51,7 +61,7 @@ pub enum Command {
         snaplen: i32,
 
         /// Maximum number of packets to keep in memory
-        #[arg(long, default_value_t = DEFAULT_BUFFER_SIZE)]
+        #[arg(long, default_value_t = DEFAULT_BUFFER_SIZE, value_parser = parse_buffer_size)]
         buffer_size: usize,
 
         /// Stop after capturing this many packets (one-shot mode)
@@ -77,7 +87,7 @@ pub enum Command {
         json: bool,
 
         /// Maximum number of packets to keep in memory
-        #[arg(long, default_value_t = DEFAULT_BUFFER_SIZE)]
+        #[arg(long, default_value_t = DEFAULT_BUFFER_SIZE, value_parser = parse_buffer_size)]
         buffer_size: usize,
     },
 
