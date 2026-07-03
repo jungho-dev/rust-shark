@@ -30,12 +30,12 @@ crossbeam-channel = { version = "0.5" }
 serde_json = { version = "1" }
 anyhow = { version = "1" }
 thiserror = { version = "2" }
-lru = { version = "0.12" }
+lru = { version = "0.16" }
 libc = { version = "0.2" }
 tempfile = { version = "3" }
 md-5 = { version = "0.10" }
 sha2 = { version = "0.10" }
-maxminddb = { version = "0.24" }
+maxminddb = { version = "0.27" }
 dirs = { version = "5" }
 toml = { version = "0.8" }
 regex = { version = "1" }
