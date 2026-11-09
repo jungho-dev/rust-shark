@@ -13,8 +13,8 @@ AR_x86_64_pc_windows_gnullvm = "C:/JUNGHO/1.Language/8.Clang/bin/ar.exe"
 [target.x86_64-pc-windows-gnullvm]
 # llvm-mingw 링커 절대경로 — PATH 의존 없이 x86_64-w64-mingw32-clang(+같은 폴더 dlltool) 사용.
 linker = "C:/JUNGHO/1.Language/8.Clang/bin/x86_64-w64-mingw32-clang.exe"
-rustflags = ["-L", "C:/JUNGHO/6.Software/8.Ncap"]
+rustflags = ["-L", "C:/JUNGHO/6.Software/1.System/Npcap"]
 
 # gnu 타깃: 외부 mingw 부재 → 번들 self-contained libgcc 사용. Npcap import lib 경로 동일.
 [target.x86_64-pc-windows-gnu]
-rustflags = ["-C", "link-self-contained=yes", "-L", "C:/JUNGHO/6.Software/8.Ncap"]
+rustflags = ["-C", "link-self-contained=yes", "-L", "C:/JUNGHO/6.Software/1.System/Npcap"]
